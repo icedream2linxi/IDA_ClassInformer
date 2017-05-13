@@ -10,12 +10,9 @@
 #include <QtWidgets/QDialogButtonBox>
 
 
-MainDialog::MainDialog(BOOL &optionPlaceStructs, BOOL &optionProcessStatic, BOOL &optionOverwriteComments, BOOL &optionAudioOnDone) : QDialog(QApplication::activeWindow(), 0)
+MainDialog::MainDialog(BOOL &optionPlaceStructs, BOOL &optionProcessStatic, BOOL &optionOverwriteComments, BOOL &optionAudioOnDone, SegSelect::segments **segs) : QDialog(QApplication::activeWindow(), 0)
 {
-    // Required for static library resources
-    Q_INIT_RESOURCE(QtResource);
-
-    Ui::Dialog::setupUi(this);
+    Ui::MainCIDialog::setupUi(this);
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
     buttonBox->addButton("CONTINUE", QDialogButtonBox::AcceptRole);
     buttonBox->addButton("CANCEL", QDialogButtonBox::RejectRole);
@@ -31,23 +28,31 @@ MainDialog::MainDialog(BOOL &optionPlaceStructs, BOOL &optionProcessStatic, BOOL
     QFile file(STYLE_PATH "style.qss");
     if (file.open(QFile::ReadOnly | QFile::Text))
         setStyleSheet(QTextStream(&file).readAll());
+
+	this->segs = segs;
+}
+
+// On choose segments
+void MainDialog::segmentSelect()
+{
+	*segs = SegSelect::select((SegSelect::DATA_HINT | SegSelect::RDATA_HINT), "Choose segments to scan");
 }
 
 // Do main dialog, return TRUE if canceled
-BOOL doMainDialog(BOOL &optionPlaceStructs, BOOL &optionProcessStatic, BOOL &optionOverwriteComments, BOOL &optionAudioOnDone)
+BOOL doMainDialog(BOOL &optionPlaceStructs, BOOL &optionProcessStatic, BOOL &optionOverwriteComments, BOOL &optionAudioOnDone, SegSelect::segments **segs)
 {
 	BOOL result = TRUE;
-    MainDialog *dlg = new MainDialog(optionPlaceStructs, optionProcessStatic, optionOverwriteComments, optionAudioOnDone);
+    MainDialog *dlg = new MainDialog(optionPlaceStructs, optionProcessStatic, optionOverwriteComments, optionAudioOnDone, segs);
     if (dlg->exec())
     {
         #define CHECKSTATE(obj,var) var = dlg->obj->isChecked()
         CHECKSTATE(checkBox1, optionPlaceStructs);
         CHECKSTATE(checkBox2, optionProcessStatic);
-        CHECKSTATE(checkBox3, optionOverwriteComments);
+        CHECKSTATE(checkBox3, optionOverwriteComments);		
         CHECKSTATE(checkBox4, optionAudioOnDone);
-        #undef CHECKSTATE   
+        #undef CHECKSTATE
 		result = FALSE;
-    }	
-	delete dlg; 
-    return(result);	
+    }
+	delete dlg;
+    return(result);
 }

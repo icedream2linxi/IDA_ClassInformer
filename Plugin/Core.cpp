@@ -48,14 +48,14 @@ static const bgcolor_t NOT_PARENT_COLOR = GRAY(235);
 // === Function Prototypes ===
 static BOOL processStaticTables();
 static void showEndStats();
-static BOOL getRttiData();
+static BOOL getRttiData(SegSelect::segments *segList);
 
 // === Data ===
 static TIMESTAMP s_startTime = 0;
 static HMODULE myModuleHandle = NULL;
 static UINT staticCCtorCnt = 0, staticCppCtorCnt = 0, staticCDtorCnt = 0;
 static UINT startingFuncCount = 0, staticCtorDtorCnt = 0;
-static BOOL uiHookInstalled = FALSE;
+static BOOL initResourcesOnce = FALSE;
 static int  chooserIcon = 0;
 static netnode *netNode = NULL;
 static eaList colList;
@@ -83,27 +83,15 @@ static int idaapi uiCallback(PVOID obj, int eventID, va_list va);
 static void freeWorkingData()
 {
     try
-    {
-        if (uiHookInstalled)
-        {
-            uiHookInstalled = FALSE;
-            unhook_from_notification_point(HT_UI, uiCallback, myModuleHandle);
-        }
-
-        if (chooserIcon)
-        {
-            free_custom_icon(chooserIcon);
-            chooserIcon = 0;
-        }
-
-        RTTI::freeWorkingData();        
+    {    
+        RTTI::freeWorkingData();
         colList.clear();
 
         if (netNode)
         {
             delete netNode;
             netNode = NULL;
-        }
+        }		
     }
     CATCH()
 }
@@ -117,11 +105,25 @@ void CORE_Init()
 // Uninitialize
 // Normally doesn't happen as we need to stay resident for the modal windows
 void CORE_Exit()
-{	
+{
     try
-    {
+    {		
         OggPlay::endPlay();
         freeWorkingData();
+
+		if (initResourcesOnce)
+		{
+			unhook_from_notification_point(HT_UI, uiCallback, myModuleHandle);
+
+			if (chooserIcon)
+			{
+				free_custom_icon(chooserIcon);
+				chooserIcon = 0;
+			}
+
+			Q_CLEANUP_RESOURCE(ClassInformerRes);
+			initResourcesOnce = FALSE;
+		}
     }
     CATCH()
 }
@@ -131,7 +133,7 @@ void CORE_Exit()
 static void newNetnodeStore()
 {
     // Kill any existing store data first
-    netNode->supdel_all(NN_DATA_TAG);
+    netNode->altdel_all(NN_DATA_TAG);
     netNode->supdel_all(NN_TABLE_TAG);
 
     // Init defaults
@@ -279,9 +281,9 @@ static QWidget *findChildByClass(QWidgetList &wl, LPCSTR className)
 void customizeChooseWindow()
 {
     try
-    {		
+    {
 		QApplication::processEvents();
-		
+
         // Get parent chooser dock widget
         QWidgetList pl = QApplication::activeWindow()->findChildren<QWidget*>("[Class Informer]");
         if (QWidget *dw = findChildByClass(pl, "IDADockWidget"))
@@ -348,11 +350,28 @@ static HWND WINAPI getIdaHwnd(){ return((HWND)callui(ui_get_hwnd).vptr); }
 void CORE_Process(int arg)
 {
     try
-    {
+    {		
         char version[16];
         sprintf(version, "%u.%u", HIBYTE(MY_VERSION), LOBYTE(MY_VERSION));
         msg("\n>> Class Informer: v: %s, built: %s, By Sirmabus\n", version, __DATE__);
         refreshUI();
+
+		if (!initResourcesOnce)
+		{
+			initResourcesOnce = TRUE;
+			Q_INIT_RESOURCE(ClassInformerRes);			
+
+			QFile file(STYLE_PATH "icon.png");
+			if (file.open(QFile::ReadOnly))
+			{
+				QByteArray ba = file.readAll();
+				chooserIcon = load_custom_icon(ba.constData(), ba.size(), "png");
+			}
+
+			// Hook to control line color
+			hook_to_notification_point(HT_UI, uiCallback, myModuleHandle);
+		}
+
         if(!autoIsOk())
         {
             msg("** Class Informer: Must wait for IDA to finish processing before starting plug-in! **\n*** Aborted ***\n\n");
@@ -376,17 +395,24 @@ void CORE_Process(int arg)
             return;
         }
 
+		// Read existing storage if any
         UINT tableCount     = getTableCount();
         WORD storageVersion = getStoreVersion();
-        BOOL storageExists  = ((storageVersion == MY_VERSION) && (tableCount > 0));
+        BOOL storageExists  = (tableCount > 0);
 
         // Ask if we should use storage or process again
-        if(storageExists)
-            storageExists = (askyn_c(1, "TITLE Class Informer \nHIDECANCEL\nUse previously stored result?        ") == 1);
-        else
-        if((storageVersion != MY_VERSION) && (tableCount > 0))
-            msg("* Storage version mismatch, must rescan *\n");
-        refreshUI();
+		if (storageExists)
+		{							
+			// Version 2.3 didn't change the format
+			UINT major = HIBYTE(storageVersion), minor = LOBYTE(storageVersion);
+			if ((major != 2) || (minor < 2))
+			{
+				msg("* Storage version mismatch, must rescan *\n");
+				refreshUI();
+			}
+			else
+				storageExists = (askyn_c(1, "TITLE Class Informer \nHIDECANCEL\nUse previously stored result?        ") == 1);
+		}
 
         BOOL aborted = FALSE;
         if(!storageExists)
@@ -408,15 +434,16 @@ void CORE_Process(int arg)
             }
 
             // Do UI
-            if (doMainDialog(optionPlaceStructs, optionProcessStatic, optionOverwriteComments, optionAudioOnDone))
+			SegSelect::segments *segList = NULL;
+            if (doMainDialog(optionPlaceStructs, optionProcessStatic, optionOverwriteComments, optionAudioOnDone, &segList))
             {
                 msg("- Canceled -\n\n");
                 return;
-            }
+            }			
 
             msg("Working..\n");
             refreshUI();
-            WaitBox::show("Class Informer", "Please wait..", "url(" STYLE_PATH "progress-style.qss)", ":/classinf/icon.png");
+            WaitBox::show("Class Informer", "Please wait..", "url(" STYLE_PATH "progress-style.qss)", STYLE_PATH "icon.png");
             WaitBox::updateAndCancelCheck(-1);
             s_startTime = getTimeStamp();
 
@@ -436,12 +463,12 @@ void CORE_Process(int arg)
                 if (!(aborted = processStaticTables()))
                     msg("Processing time: %s.\n", timeString(getTimeStamp() - s_startTime));
                 refreshUI();
-            }      
+            }
 
             if (!aborted)
             {
                 // Get RTTI data
-                if (!(aborted = getRttiData()))
+                if (!(aborted = getRttiData(segList)))
                 {
                     // Optionally play completion sound
                     if (optionAudioOnDone)
@@ -450,7 +477,7 @@ void CORE_Process(int arg)
                         if (endTime > (TIMESTAMP) 2.4)
                         {
                             OggPlay::endPlay();
-                            QFile file(":/classinf/completed.ogg");
+                            QFile file(STYLE_PATH "completed.ogg");
                             if (file.open(QFile::ReadOnly))
                             {
                                 QByteArray ba = file.readAll();
@@ -460,12 +487,12 @@ void CORE_Process(int arg)
                     }
 
                     showEndStats();
-                    WaitBox::hide();                 
+                    WaitBox::hide();
                     msg("Done.\n\n");
                 }
             }
 
-            refresh_idaview_anyway();            
+            refresh_idaview_anyway();
             if (aborted)
             {
                 msg("- Aborted -\n\n");
@@ -476,17 +503,6 @@ void CORE_Process(int arg)
         // Show list result window
         if (!aborted && (getTableCount() > 0))
         {
-            // Install hook to control line color
-            if (!uiHookInstalled)
-                uiHookInstalled = hook_to_notification_point(HT_UI, uiCallback, myModuleHandle);
-
-            QFile file(":/classinf/icon.png");
-            if (file.open(QFile::ReadOnly))
-            {
-                QByteArray ba = file.readAll();
-                chooserIcon = load_custom_icon(ba.constData(), ba.size(), "png");
-            }
-
             choose2((CH_MULTI | CH_ATTRS), // Non-modal window; mullti-select (for select copying) w/attributes
             -1, -1, -1, -1,     // Window position
             NULL,               // LPARM
@@ -505,7 +521,7 @@ void CORE_Process(int arg)
             lw_onClose,         // Function to call when the window is closed
             NULL,               // Popup menu items
             lw_onGetIcon);      // Line icon function
-			
+
             customizeChooseWindow();
         }
     }
@@ -553,11 +569,11 @@ static void setIntializerTable(ea_t start, ea_t end, BOOL isCpp)
             if (!hasUniqueName(start))
             {
                 char name[MAXSTR]; name[SIZESTR(name)] = 0;
-                if (isCpp)                  
+                if (isCpp)
                     _snprintf(name, SIZESTR(name), "__xc_a_%d", staticCppCtorCnt);
                 else
                     _snprintf(name, SIZESTR(name), "__xi_a_%d", staticCCtorCnt);
-                set_name(start, name, (SN_NON_AUTO | SN_NOWARN));                
+                set_name(start, name, (SN_NON_AUTO | SN_NOWARN));
             }
 
             // End label
@@ -639,7 +655,7 @@ static void setTerminatorTable(ea_t start, ea_t end)
             {
                 char name[MAXSTR]; name[SIZESTR(name)] = 0;
                 _snprintf(name, SIZESTR(name), "__xt_z_%d", staticCDtorCnt);
-                set_name(end, name, (SN_NON_AUTO | SN_NOWARN));              
+                set_name(end, name, (SN_NON_AUTO | SN_NOWARN));
             }
 
             // Comment
@@ -686,7 +702,7 @@ static void setCtorDtorTable(ea_t start, ea_t end)
             {
                 char name[MAXSTR]; name[SIZESTR(name)] = 0;
                 _snprintf(name, SIZESTR(name), "__x?_a_%d", staticCtorDtorCnt);
-                set_name(start, name, (SN_NON_AUTO | SN_NOWARN));                
+                set_name(start, name, (SN_NON_AUTO | SN_NOWARN));
             }
 
             // End label
@@ -694,7 +710,7 @@ static void setCtorDtorTable(ea_t start, ea_t end)
             {
                 char name[MAXSTR]; name[SIZESTR(name)] = 0;
                 _snprintf(name, SIZESTR(name), "__x?_z_%d", staticCtorDtorCnt);
-                set_name(end, name, (SN_NON_AUTO | SN_NOWARN));               
+                set_name(end, name, (SN_NON_AUTO | SN_NOWARN));
             }
 
             // Comment
@@ -717,7 +733,7 @@ static void setCtorDtorTable(ea_t start, ea_t end)
 }
 
 
-// Process redister based _initterm() 
+// Process redister based _initterm()
 static void processRegisterInitterm(ea_t start, ea_t end, ea_t call)
 {
     if ((end != BADADDR) && (start != BADADDR))
@@ -732,9 +748,9 @@ static void processRegisterInitterm(ea_t start, ea_t end, ea_t call)
             setIntializerTable(start, end, TRUE);
             set_cmt(call, "_initterm", TRUE);
         }
-        else        
-            msg("  ** Bad address range of " EAFORMAT ", " EAFORMAT " for \"_initterm\" type ** <click address>.\n", start, end);                   
-    }     
+        else
+            msg("  ** Bad address range of " EAFORMAT ", " EAFORMAT " for \"_initterm\" type ** <click address>.\n", start, end);
+    }
 }
 
 static UINT doInittermTable(func_t *func, ea_t start, ea_t end, LPCTSTR name)
@@ -751,10 +767,10 @@ static UINT doInittermTable(func_t *func, ea_t start, ea_t end, LPCTSTR name)
 
             // Try to determine if we are in dtor or ctor section
             if (func)
-            {              
+            {
                 qstring qstr;
                 if (get_long_name(&qstr, func->startEA) > 0)
-                {          
+                {
                     char funcName[MAXSTR]; funcName[SIZESTR(funcName)] = 0;
                     strncpy(funcName, qstr.c_str(), (MAXSTR - 1));
                     _strlwr(funcName);
@@ -764,7 +780,7 @@ static UINT doInittermTable(func_t *func, ea_t start, ea_t end, LPCTSTR name)
                     {
                         msg("    " EAFORMAT " to " EAFORMAT " CTOR table.\n", start, end);
                         setIntializerTable(start, end, TRUE);
-                        found = TRUE;                       
+                        found = TRUE;
                     }
                     else
                     // Exit/dtor function?
@@ -783,10 +799,10 @@ static UINT doInittermTable(func_t *func, ea_t start, ea_t end, LPCTSTR name)
                 msg("    " EAFORMAT " to " EAFORMAT " CTOR/DTOR table.\n", start, end);
                 setCtorDtorTable(start, end);
                 found = TRUE;
-            }            
+            }
         }
-        else      
-            msg("    ** Miss matched segment table addresses " EAFORMAT ", " EAFORMAT " for \"%s\" type **\n", start, end, name);       
+        else
+            msg("    ** Miss matched segment table addresses " EAFORMAT ", " EAFORMAT " for \"%s\" type **\n", start, end, name);
     }
     else
         msg("    ** Bad input address range of " EAFORMAT ", " EAFORMAT " for \"%s\" type **\n", start, end, name);
@@ -811,7 +827,7 @@ static BOOL processInitterm(ea_t address, LPCTSTR name)
         if (isCode(get_flags_novalue(xref)))
         {
             do
-            {           
+            {
                 // The most common are two instruction arguments
                 // Back up two instructions
                 ea_t instruction1 = prev_head(xref, 0);
@@ -828,7 +844,7 @@ static BOOL processInitterm(ea_t address, LPCTSTR name)
                     //msg("   " EAFORMAT " arg2 outside of contained function **\n", func->startEA);
                     break;
                 }
-            
+
                 struct ARG2PAT
                 {
                     LPCSTR pattern;
@@ -842,19 +858,19 @@ static BOOL processInitterm(ea_t address, LPCTSTR name)
                     #else
                     { "48 8D 15 ?? ?? ?? ?? 48 8D 0D ?? ?? ?? ??", 3, 3 },  // lea rdx,s, lea rcx,e
                     #endif
-                }; 
+                };
                 BOOL matched = FALSE;
                 for (UINT i = 0; (i < qnumber(arg2pat)) && !matched; i++)
                 {
                     ea_t match = find_binary(instruction2, xref, arg2pat[i].pattern, 16, (SEARCH_DOWN | SEARCH_NOBRK | SEARCH_NOSHOW));
                     if (match != BADADDR)
-                    {         
+                    {
                         #ifndef __EA64__
                         ea_t start = getEa(match + arg2pat[i].start);
                         ea_t end   = getEa(match + arg2pat[i].end);
                         #else
-                        UINT startOffset = get_32bit(instruction1 + arg2pat[i].start);                      
-                        UINT endOffset   = get_32bit(instruction2 + arg2pat[i].end);                     
+                        UINT startOffset = get_32bit(instruction1 + arg2pat[i].start);
+                        UINT endOffset   = get_32bit(instruction2 + arg2pat[i].end);
                         ea_t start = (instruction1 + 7 + *((PINT) &startOffset)); // TODO: 7 is hard coded instruction length, put this in arg2pat table?
                         ea_t end   = (instruction2 + 7 + *((PINT) &endOffset));
                         #endif
@@ -862,7 +878,7 @@ static BOOL processInitterm(ea_t address, LPCTSTR name)
                         count += doInittermTable(func, start, end, name);
                         matched = TRUE;
                         break;
-                    }                    
+                    }
                 }
 
                 // 3 instruction
@@ -910,15 +926,15 @@ static BOOL processStaticTables()
     // x64 __tmainCRTStartup, _CRT_INIT
 
     try
-    {                  
-        // Locate _initterm() and _initterm_e() functions        
+    {
+        // Locate _initterm() and _initterm_e() functions
         STRMAP inittermMap;
-        func_t  *cinitFunc = NULL;        
+        func_t  *cinitFunc = NULL;
         UINT funcCount = get_func_qty();
         for (UINT i = 0; i < funcCount; i++)
         {
             if (func_t *func = getn_func(i))
-            {                           
+            {
                 qstring qstr;
                 if (get_long_name(&qstr, func->startEA) > 0)
                 {
@@ -951,7 +967,7 @@ static BOOL processStaticTables()
                             inittermMap[func->startEA] = name;
                         }
                     }
-                }              
+                }
             }
         }
         refreshUI();
@@ -980,7 +996,7 @@ static BOOL processStaticTables()
 
         // Process register based _initterm() calls inside _cint()
         if (cinitFunc)
-        {                     
+        {
             struct CREPAT
             {
                 LPCSTR pattern;
@@ -992,20 +1008,20 @@ static BOOL processStaticTables()
             };
 
             for (UINT i = 0; i < qnumber(pat); i++)
-            {                                      
+            {
                 ea_t match = find_binary(cinitFunc->startEA, cinitFunc->endEA, pat[i].pattern, 16, (SEARCH_DOWN | SEARCH_NOBRK | SEARCH_NOSHOW));
                 while (match != BADADDR)
                 {
                     msg("  " EAFORMAT " Register _initterm(), pattern #%d.\n", match, i);
                     ea_t start = getEa(match + pat[i].start);
-                    ea_t end   = getEa(match + pat[i].end);                    
+                    ea_t end   = getEa(match + pat[i].end);
                     processRegisterInitterm(start, end, (match + pat[i].call));
                     match = find_binary(match + 30, cinitFunc->endEA, pat[i].pattern, 16, (SEARCH_NEXT | SEARCH_DOWN | SEARCH_NOBRK | SEARCH_NOSHOW));
-                };               
+                };
             }
         }
         msg(" \n");
-        refreshUI();                
+        refreshUI();
         if (WaitBox::updateAndCancelCheck())
             return(TRUE);
 
@@ -1083,7 +1099,7 @@ void fixFunction(ea_t ea)
 // Get IDA EA bit value with verification
 BOOL getVerifyEa(ea_t ea, ea_t &rValue)
 {
-    // Location valid?   
+    // Location valid?
     if (isLoaded(ea))
     {
         // Get ea_t value
@@ -1117,14 +1133,14 @@ BOOL getPlainTypeName(__in LPCSTR mangled, __out_bcount(MAXSTR) LPSTR outStr)
     }
     else
     // IDA demangler for everything else
-    {            
-        qstring qstr;    
+    {
+        qstring qstr;
         int result = demangle_name2(&qstr, mangled, (MT_MSCOMP | MNG_NODEFINIT));
         if (result < 0)
         {
             //msg("** getPlainClassName:demangle_name2() failed to unmangle! result: %d, input: \"%s\"\n", result, mangled);
             return(FALSE);
-        }        
+        }
 
         // No inhibit flags will drop this
         strncpy(outStr, qstr.c_str(), (MAXSTR - 1));
@@ -1180,9 +1196,9 @@ int addStrucMember(struc_t *sptr, char *name, ea_t offset, flags_t flag, opinfo_
 
 
 void setUnknown(ea_t ea, int size)
-{   
+{
     // TODO: Does the overrun problem still exist?
-    //do_unknown_range(ea, (size_t)size, DOUNK_SIMPLE);    
+    //do_unknown_range(ea, (size_t)size, DOUNK_SIMPLE);
     while (size > 0)
     {
         int isize = get_item_size(ea);
@@ -1193,7 +1209,7 @@ void setUnknown(ea_t ea, int size)
             do_unknown(ea, DOUNK_SIMPLE);
             ea += (ea_t)isize, size -= isize;
         }
-    };    
+    };
 }
 
 
@@ -1205,15 +1221,15 @@ static BOOL scanSeg4Cols(segment_t *seg)
         strcpy(name, "???");
     msg(" N: \"%s\", A: " EAFORMAT " - " EAFORMAT ", S: %s.\n", name, seg->startEA, seg->endEA, byteSizeString(seg->size()));
     refreshUI();
-    
-    UINT found = 0;   
+
+    UINT found = 0;
     if (seg->size() >= sizeof(RTTI::_RTTICompleteObjectLocator))
     {
-        ea_t startEA = ((seg->startEA + sizeof(UINT)) & ~((ea_t)(sizeof(UINT) - 1)));       
-        ea_t endEA   = (seg->endEA - sizeof(RTTI::_RTTICompleteObjectLocator));      
-    
+        ea_t startEA = ((seg->startEA + sizeof(UINT)) & ~((ea_t)(sizeof(UINT) - 1)));
+        ea_t endEA   = (seg->endEA - sizeof(RTTI::_RTTICompleteObjectLocator));
+
         for (ea_t ptr = startEA; ptr < endEA;)
-        {            
+        {
             #ifdef __EA64__
             // Check for possible COL here
             // Signature will be one
@@ -1224,11 +1240,11 @@ static BOOL scanSeg4Cols(segment_t *seg)
                 {
                     // yes
                     colList.push_front(ptr);
-                    RTTI::_RTTICompleteObjectLocator::doStruct(ptr);                    
+                    RTTI::_RTTICompleteObjectLocator::doStruct(ptr);
                     ptr += sizeof(RTTI::_RTTICompleteObjectLocator);
                     continue;
                 }
-            }  
+            }
             else
             {
                 // TODO: Should we check stray BCDs?
@@ -1237,7 +1253,7 @@ static BOOL scanSeg4Cols(segment_t *seg)
             }
             #else
             // TypeDescriptor address here?
-            ea_t ea = getEa(ptr);       
+            ea_t ea = getEa(ptr);
             if (ea >= 0x10000)
             {
                 if (RTTI::type_info::isValid(ea))
@@ -1265,10 +1281,10 @@ static BOOL scanSeg4Cols(segment_t *seg)
                 }
             }
             #endif
-          
-            if (WaitBox::isUpdateTime())          
+
+            if (WaitBox::isUpdateTime())
                 if (WaitBox::updateAndCancelCheck())
-                    return(TRUE);            
+                    return(TRUE);
 
             ptr += sizeof(UINT);
         }
@@ -1284,7 +1300,7 @@ static BOOL scanSeg4Cols(segment_t *seg)
 }
 //
 // Locate COL by descriptor list
-static BOOL findCols()
+static BOOL findCols(SegSelect::segments *segList)
 {
     try
     {
@@ -1292,65 +1308,34 @@ static BOOL findCols()
         TIMESTAMP startTime = getTimeStamp();
         #endif
 
-        // Usually in ".rdata" seg, try it first
-        std::unordered_set<segment_t *> segSet;
-        if (segment_t *seg = get_segm_by_name(".rdata"))
-        {
-            segSet.insert(seg);
-            if (scanSeg4Cols(seg))
-                return(FALSE);
-        }
-
-        // And ones named ".data"
-        int segCount = get_segm_qty();
-        //if (colList.empty())
-        {
-            for (int i = 0; i < segCount; i++)
-            {
-                if (segment_t *seg = getnseg(i))
-                {
-                    if (seg->type == SEG_DATA)
-                    {
-                        if (segSet.find(seg) == segSet.end())
-                        {
-                            char name[8];
-                            if (get_true_segm_name(seg, name, SIZESTR(name)) == SIZESTR(".data"))
-                            {
-                                if (strcmp(name, ".data") == 0)
-                                {
-                                    segSet.insert(seg);
-                                    if (scanSeg4Cols(seg))
-                                        return(FALSE);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // If still none found, try any remaining data type segments
-        if (colList.empty())
-        {
-            for (int i = 0; i < segCount; i++)
-            {
-                if (segment_t *seg = getnseg(i))
-                {
-                    if (seg->type == SEG_DATA)
-                    {
-                        if (segSet.find(seg) == segSet.end())
-                        {
-                            segSet.insert(seg);
-                            if (scanSeg4Cols(seg))
-                                return(FALSE);
-                        }
-                    }
-                }
-            }
-        }
+		// Use user selected segments
+		if (segList && !segList->empty())
+		{
+			for (SegSelect::segments::iterator it = segList->begin(); it != segList->end(); ++it)
+			{
+				if (scanSeg4Cols(*it))
+					return(FALSE);				
+			}
+		}
+		else
+		// Scan data segments named
+		{
+			int segCount = get_segm_qty();
+			for (int i = 0; i < segCount; i++)
+			{
+				if (segment_t *seg = getnseg(i))
+				{
+					if (seg->type == SEG_DATA)
+					{
+						if (scanSeg4Cols(seg))
+							return(FALSE);
+					}
+				}
+			}
+		}
 
         char numBuffer[32];
-        msg("     Total COL: %s\n", prettyNumberString(colList.size(), numBuffer));        
+        msg("     Total COL: %s\n", prettyNumberString(colList.size(), numBuffer));
         #ifdef _DEVMODE
         msg("COL scan time: %.3f\n", (getTimeStamp() - startTime));
         #endif
@@ -1399,9 +1384,9 @@ static BOOL scanSeg4Vftables(segment_t *seg, eaRefMap &colMap)
                 }
             }
 
-            if (WaitBox::isUpdateTime())            
+            if (WaitBox::isUpdateTime())
                 if (WaitBox::updateAndCancelCheck())
-                    return(TRUE);            
+                    return(TRUE);
         }
     }
 
@@ -1414,7 +1399,7 @@ static BOOL scanSeg4Vftables(segment_t *seg, eaRefMap &colMap)
     return(FALSE);
 }
 //
-static BOOL findVftables()
+static BOOL findVftables(SegSelect::segments *segList)
 {
     try
     {
@@ -1422,67 +1407,36 @@ static BOOL findVftables()
         TIMESTAMP startTime = getTimeStamp();
         #endif
 
-        // COLs in a hash map for speed, plus match counts
+        // COLs in hash map for speed, plus match counts
         eaRefMap colMap;
         for (eaList::const_iterator it = colList.begin(), end = colList.end(); it != end; ++it)
             colMap[*it] = 0;
 
-        // Usually in ".rdata", try first.
-        std::unordered_set<segment_t *> segSet;
-        if (segment_t *seg = get_segm_by_name(".rdata"))
-        {
-            segSet.insert(seg);
-            if (scanSeg4Vftables(seg, colMap))
-                return(TRUE);
-        }
-
-        // And ones named ".data"
-        int segCount = get_segm_qty();
-        //if (colList.empty())
-        {
-            for (int i = 0; i < segCount; i++)
-            {
-                if (segment_t *seg = getnseg(i))
-                {
-                    if (seg->type == SEG_DATA)
-                    {
-                        if (segSet.find(seg) == segSet.end())
-                        {
-                            char name[8];
-                            if (get_true_segm_name(seg, name, SIZESTR(name)) == SIZESTR(".data"))
-                            {
-                                if (strcmp(name, ".data") == 0)
-                                {
-                                    segSet.insert(seg);
-                                    if (scanSeg4Vftables(seg, colMap))
-                                        return(TRUE);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // If still none found, try any remaining data type segments
-        if (colList.empty())
-        {
-            for (int i = 0; i < segCount; i++)
-            {
-                if (segment_t *seg = getnseg(i))
-                {
-                    if (seg->type == SEG_DATA)
-                    {
-                        if (segSet.find(seg) == segSet.end())
-                        {
-                            segSet.insert(seg);
-                            if (scanSeg4Vftables(seg, colMap))
-                                return(TRUE);
-                        }
-                    }
-                }
-            }
-        }
+		// Use user selected segments
+		if (segList && !segList->empty())
+		{
+			for (SegSelect::segments::iterator it = segList->begin(); it != segList->end(); ++it)
+			{
+				if (scanSeg4Vftables(*it, colMap))
+					return(FALSE);				
+			}
+		}
+		else
+		// Scan data segments named
+		{
+			int segCount = get_segm_qty();
+			for (int i = 0; i < segCount; i++)
+			{
+				if (segment_t *seg = getnseg(i))
+				{
+					if (seg->type == SEG_DATA)
+					{
+						if (scanSeg4Vftables(seg, colMap))
+							return(FALSE);
+					}
+				}
+			}
+		}
 
         // Rebuild 'colList' with any that were not located
         if (!colList.empty())
@@ -1507,7 +1461,7 @@ static BOOL findVftables()
 // ================================================================================================
 
 // Gather RTTI data
-static BOOL getRttiData()
+static BOOL getRttiData(SegSelect::segments *segList)
 {
     // Free RTTI working data on return
     struct OnReturn  { ~OnReturn() { RTTI::freeWorkingData(); }; } onReturn;
@@ -1520,20 +1474,20 @@ static BOOL getRttiData()
         // ==== Find and process COLs
         msg("\nScanning for for RTTI Complete Object Locators.\n");
         refreshUI();
-        if(findCols())
+        if(findCols(segList))
             return(TRUE);
         // typeDescList = TDs left that don't have a COL reference
-        // colList = Located COLs          
+        // colList = Located COLs
 
         // ==== Find and process vftables
         msg("\nScanning for vftables.\n");
         refreshUI();
-        if(findVftables())
+        if(findVftables(segList))
             return(TRUE);
         // colList = COLs left that don't have a vft reference
 
         // Could use the unlocated ref lists typeDescList & colList around for possible separate listing, etc.
-        // They get cleaned up on return of this function anyhow.       
+        // They get cleaned up on return of this function anyhow.
     }
     CATCH()
 

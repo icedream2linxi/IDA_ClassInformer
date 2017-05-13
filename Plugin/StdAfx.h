@@ -46,6 +46,12 @@
 #pragma comment(lib, "Qt5Gui.lib")
 #pragma comment(lib, "Qt5Widgets.lib")
 
+// QT_NO_UNICODE_LITERAL must be defined (best in preprocessor setting)
+// So Qt doesn't a static string pool that will cause IDA to crash on unload
+#ifndef QT_NO_UNICODE_LITERAL
+# error QT_NO_UNICODE_LITERAL must be defined to avoid Qt string crashes
+#endif
+
 #include <Utility.h>
 #include "undname.h"
 
@@ -99,6 +105,7 @@ inline BOOL isEa(flags_t f)
 }
 
 
+//#define STYLE_PATH "C:/Projects/IDA Pro Work/IDA_ClassInformer_PlugIn/Plugin/"
 #define STYLE_PATH ":/classinf/"
 
-#define MY_VERSION MAKEWORD(2, 2) // Low, high, convention: 0 to 99
+#define MY_VERSION MAKEWORD(4, 2) // Low, high, convention: 0 to 99

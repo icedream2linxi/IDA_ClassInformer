@@ -2,7 +2,7 @@
 Class Informer:
 ===========================================================
 IDA Pro class vftable finder, namer, fixer, lister plug-in.
-Version 2.2, December 2015
+Version 2.4, May 2017
 By Sirmabus
 
 https://sourceforge.net/projects/classinformer/
@@ -113,6 +113,10 @@ Disassembler"
 
 
 -- [History] --------------------------------------------
+
+2.4 - 1) Now scans all "DATA" type segments. Before would only scan the first
+         ".data" and ".rdata" segments.
+      2) Added segment select option to plug-in dialog.
 
 2.2 - 1) Updated to IDA SDK 6.9 and MSVC 2015.
 
