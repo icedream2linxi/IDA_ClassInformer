@@ -179,10 +179,10 @@ void RTTI::addDefinitionsToIda()
     ZeroMemory(&mtoff, sizeof(refinfo_t));
     #ifndef __EA64__
 	mtoff.ri.flags  = REF_OFF32;
-    #define EAOFFSET (offflag() | dwrdflag())
+    #define EAOFFSET (off_flag() | dword_flag())
     #else
     mtoff.ri.flags = REF_OFF64;
-    #define EAOFFSET (offflag() | qwrdflag())
+    #define EAOFFSET (off_flag() | qword_flag())
     #endif
 	mtoff.ri.target = BADADDR;
 
@@ -199,32 +199,32 @@ void RTTI::addDefinitionsToIda()
     if (structPtr = AddStruct(s_type_info_ID, "type_info", "RTTI std::type_info class (#classinformer)"))
     {
         ADD_MEMBER(EAOFFSET, &mtoff, RTTI::type_info, vfptr);
-        ADD_MEMBER(dwrdflag(), NULL, RTTI::type_info, _M_data);
+        ADD_MEMBER(dword_flag(), NULL, RTTI::type_info, _M_data);
 
         // Name string zero size
         opinfo_t mt;
         ZeroMemory(&mt, sizeof(refinfo_t));
-        if(addStrucMember(structPtr, "_M_d_name", offsetof(RTTI::type_info, _M_d_name), asciflag(), &mt, 0) != 0)
+        if(addStrucMember(structPtr, "_M_d_name", offsetof(RTTI::type_info, _M_d_name), strlit_flag(), &mt, 0) != 0)
             msg("** addDefinitionsToIda():  _M_d_name failed! \n");
     }
 
     // Must come before the following  "_RTTIBaseClassDescriptor"
     if (structPtr = AddStruct(s_PMD_ID, "_PMD", "RTTI Base class descriptor displacement container (#classinformer)"))
 	{
-		ADD_MEMBER(dwrdflag(), NULL, RTTI::PMD, mdisp);
-		ADD_MEMBER(dwrdflag(), NULL, RTTI::PMD, pdisp);
-		ADD_MEMBER(dwrdflag(), NULL, RTTI::PMD, vdisp);
+		ADD_MEMBER(dword_flag(), NULL, RTTI::PMD, mdisp);
+		ADD_MEMBER(dword_flag(), NULL, RTTI::PMD, pdisp);
+		ADD_MEMBER(dword_flag(), NULL, RTTI::PMD, vdisp);
 	}
 
     if (structPtr = AddStruct(s_ClassHierarchyDescriptor_ID, "_RTTIClassHierarchyDescriptor", "RTTI Class Hierarchy Descriptor (#classinformer)"))
     {
-        ADD_MEMBER(dwrdflag(), NULL, RTTI::_RTTIClassHierarchyDescriptor, signature);
-        ADD_MEMBER(dwrdflag(), NULL, RTTI::_RTTIClassHierarchyDescriptor, attributes);
-        ADD_MEMBER(dwrdflag(), NULL, RTTI::_RTTIClassHierarchyDescriptor, numBaseClasses);
+        ADD_MEMBER(dword_flag(), NULL, RTTI::_RTTIClassHierarchyDescriptor, signature);
+        ADD_MEMBER(dword_flag(), NULL, RTTI::_RTTIClassHierarchyDescriptor, attributes);
+        ADD_MEMBER(dword_flag(), NULL, RTTI::_RTTIClassHierarchyDescriptor, numBaseClasses);
         #ifndef __EA64__
         ADD_MEMBER(EAOFFSET, &mtoff, RTTI::_RTTIClassHierarchyDescriptor, baseClassArray);
         #else
-        ADD_MEMBER(dwrdflag(), NULL, RTTI::_RTTIClassHierarchyDescriptor, baseClassArray);
+        ADD_MEMBER(dword_flag(), NULL, RTTI::_RTTIClassHierarchyDescriptor, baseClassArray);
         #endif
     }
 
@@ -233,28 +233,28 @@ void RTTI::addDefinitionsToIda()
         #ifndef __EA64__
         ADD_MEMBER(EAOFFSET, &mtoff, RTTI::_RTTIBaseClassDescriptor, typeDescriptor);
         #else
-        ADD_MEMBER(dwrdflag(), NULL, RTTI::_RTTIBaseClassDescriptor, typeDescriptor);
+        ADD_MEMBER(dword_flag(), NULL, RTTI::_RTTIBaseClassDescriptor, typeDescriptor);
         #endif
-		ADD_MEMBER(dwrdflag(), NULL, RTTI::_RTTIBaseClassDescriptor, numContainedBases);
+		ADD_MEMBER(dword_flag(), NULL, RTTI::_RTTIBaseClassDescriptor, numContainedBases);
         opinfo_t mt;
         ZeroMemory(&mt, sizeof(refinfo_t));
 		mt.tid = s_PMD_ID;
-		ADD_MEMBER(struflag(), &mt, RTTI::_RTTIBaseClassDescriptor, pmd);
-        ADD_MEMBER(dwrdflag(), NULL, RTTI::_RTTIBaseClassDescriptor, attributes);
+		ADD_MEMBER(stru_flag(), &mt, RTTI::_RTTIBaseClassDescriptor, pmd);
+        ADD_MEMBER(dword_flag(), NULL, RTTI::_RTTIBaseClassDescriptor, attributes);
 	}
 
 	if(structPtr = AddStruct(s_CompleteObjectLocator_ID, "_RTTICompleteObjectLocator", "RTTI Complete Object Locator (#classinformer)"))
 	{
-		ADD_MEMBER(dwrdflag(), NULL, RTTI::_RTTICompleteObjectLocator, signature);
-		ADD_MEMBER(dwrdflag(), NULL, RTTI::_RTTICompleteObjectLocator, offset);
-		ADD_MEMBER(dwrdflag(), NULL, RTTI::_RTTICompleteObjectLocator, cdOffset);
+		ADD_MEMBER(dword_flag(), NULL, RTTI::_RTTICompleteObjectLocator, signature);
+		ADD_MEMBER(dword_flag(), NULL, RTTI::_RTTICompleteObjectLocator, offset);
+		ADD_MEMBER(dword_flag(), NULL, RTTI::_RTTICompleteObjectLocator, cdOffset);
         #ifndef __EA64__
         ADD_MEMBER(EAOFFSET, &mtoff, RTTI::_RTTICompleteObjectLocator, typeDescriptor);
         ADD_MEMBER(EAOFFSET, &mtoff, RTTI::_RTTICompleteObjectLocator, classDescriptor);
         #else
-        ADD_MEMBER(dwrdflag(), NULL, RTTI::_RTTICompleteObjectLocator, typeDescriptor);
-        ADD_MEMBER(dwrdflag(), NULL, RTTI::_RTTICompleteObjectLocator, classDescriptor);
-        ADD_MEMBER(dwrdflag(), NULL, RTTI::_RTTICompleteObjectLocator, objectBase);
+        ADD_MEMBER(dword_flag(), NULL, RTTI::_RTTICompleteObjectLocator, typeDescriptor);
+        ADD_MEMBER(dword_flag(), NULL, RTTI::_RTTICompleteObjectLocator, classDescriptor);
+        ADD_MEMBER(dword_flag(), NULL, RTTI::_RTTICompleteObjectLocator, objectBase);
         #endif
 	}
 
@@ -265,11 +265,11 @@ void RTTI::addDefinitionsToIda()
 // If it fails at least the fields should be set
 static void doStructRTTI(ea_t ea, tid_t tid, __in_opt LPSTR typeName = NULL, BOOL bHasChd = FALSE)
 {
-	#define putDword(ea) doDwrd(ea, sizeof(DWORD))
+	#define putDword(ea) create_dword(ea, sizeof(DWORD))
     #ifndef __EA64__
-    #define putEa(ea) doDwrd(ea, sizeof(ea_t))
+    #define putEa(ea) create_dword(ea, sizeof(ea_t))
     #else
-    #define putEa(ea) doQwrd(ea, sizeof(ea_t))
+    #define putEa(ea) create_qword(ea, sizeof(ea_t))
     #endif
 
 	if(tid == s_type_info_ID)
@@ -282,18 +282,18 @@ static void doStructRTTI(ea_t ea, tid_t tid, __in_opt LPSTR typeName = NULL, BOO
         setUnknown(ea, structSize);
         BOOL result = FALSE;
         if (optionPlaceStructs)
-            result = doStruct(ea, structSize, s_type_info_ID);
+            result = create_struct(ea, structSize, s_type_info_ID);
         if (!result)
         {
             putEa(ea + offsetof(RTTI::type_info, vfptr));
             putEa(ea + offsetof(RTTI::type_info, _M_data));
-            doASCI((ea + offsetof(RTTI::type_info, _M_d_name)), nameLen);
+            create_strlit(ea + offsetof(RTTI::type_info, _M_d_name), nameLen, STRTYPE_C);
         }
 
         // sh!ft: End should be aligned
         ea_t end = (ea + offsetof(RTTI::type_info, _M_d_name) + nameLen);
         if (end % 4)
-            doAlign(end, (4 - (end % 4)), 0);
+			create_align(end, (4 - (end % 4)), 0);
 	}
 	else
     if (tid == s_ClassHierarchyDescriptor_ID)
@@ -301,7 +301,7 @@ static void doStructRTTI(ea_t ea, tid_t tid, __in_opt LPSTR typeName = NULL, BOO
         setUnknown(ea, sizeof(RTTI::_RTTIClassHierarchyDescriptor));
         BOOL result = FALSE;
         if (optionPlaceStructs)
-            result = doStruct(ea, sizeof(RTTI::_RTTIClassHierarchyDescriptor), s_ClassHierarchyDescriptor_ID);
+            result = create_struct(ea, sizeof(RTTI::_RTTIClassHierarchyDescriptor), s_ClassHierarchyDescriptor_ID);
         if (!result)
         {
             putDword(ea + offsetof(RTTI::_RTTIClassHierarchyDescriptor, signature));
@@ -321,7 +321,7 @@ static void doStructRTTI(ea_t ea, tid_t tid, __in_opt LPSTR typeName = NULL, BOO
         doStructRTTI(ea + offsetof(RTTI::_RTTIBaseClassDescriptor, pmd), s_PMD_ID);
         BOOL result = FALSE;
         if (optionPlaceStructs)
-            result = doStruct(ea, sizeof(RTTI::_RTTIBaseClassDescriptor), s_BaseClassDescriptor_ID);
+            result = create_struct(ea, sizeof(RTTI::_RTTIBaseClassDescriptor), s_BaseClassDescriptor_ID);
         if (!result)
         {
             #ifndef __EA64__
@@ -349,7 +349,7 @@ static void doStructRTTI(ea_t ea, tid_t tid, __in_opt LPSTR typeName = NULL, BOO
 		setUnknown(ea, sizeof(RTTI::PMD));
         BOOL result = FALSE;
         if (optionPlaceStructs)
-            result = doStruct(ea, sizeof(RTTI::PMD), s_PMD_ID);
+            result = create_struct(ea, sizeof(RTTI::PMD), s_PMD_ID);
         if (!result)
         {
             putDword(ea + offsetof(RTTI::PMD, mdisp));
@@ -363,7 +363,7 @@ static void doStructRTTI(ea_t ea, tid_t tid, __in_opt LPSTR typeName = NULL, BOO
 		setUnknown(ea, sizeof(RTTI::_RTTICompleteObjectLocator));
         BOOL result = FALSE;
         if (optionPlaceStructs)
-            result = doStruct(ea, sizeof(RTTI::_RTTICompleteObjectLocator), s_CompleteObjectLocator_ID);
+            result = create_struct(ea, sizeof(RTTI::_RTTICompleteObjectLocator), s_CompleteObjectLocator_ID);
         if (!result)
         {
             putDword(ea + offsetof(RTTI::_RTTICompleteObjectLocator, signature));
@@ -403,14 +403,16 @@ static int readIdaString(ea_t ea, __out LPSTR buffer, int bufferSize)
     else
     {
         // Read string at ea if it exists
-        int len = get_max_ascii_length(ea, ASCSTR_C, ALOPT_IGNHEADS);
+        int len = get_max_strlit_length(ea, 0, ALOPT_IGNHEADS);
         if (len > 0)
         {
             if (len > bufferSize) len = bufferSize;
-            if (get_ascii_contents2(ea, len, ASCSTR_C, buffer, bufferSize))
+			qstring content;
+            if (get_strlit_contents(&content, ea, len, 0))
             {
+				strcpy(buffer, content.c_str());
                 // Cache it
-                buffer[len - 1] = 0;
+                //buffer[len - 1] = 0;
                 stringCache[ea] = buffer;
             }
             else
@@ -437,11 +439,11 @@ BOOL RTTI::type_info::isValid(ea_t typeInfo)
     if (tdSet.find(typeInfo) != tdSet.end())
         return(TRUE);
 
-    if (isLoaded(typeInfo))
+    if (is_loaded(typeInfo))
 	{
 		// Verify what should be a vftable
         ea_t ea = getEa(typeInfo + offsetof(type_info, vfptr));
-        if (isLoaded(ea))
+        if (is_loaded(ea))
 		{
             // _M_data should be NULL statically
             ea_t _M_data = BADADDR;
@@ -513,7 +515,7 @@ void RTTI::type_info::doStruct(ea_t typeInfo)
 // Return TRUE if address is a valid RTTI structure
 BOOL RTTI::_RTTICompleteObjectLocator::isValid(ea_t col)
 {
-    if (isLoaded(col))
+    if (is_loaded(col))
     {
         // Check signature
         UINT signature = -1;
@@ -635,7 +637,7 @@ BOOL RTTI::_RTTIBaseClassDescriptor::isValid(ea_t bcd, ea_t colBase64)
     if (bcdSet.find(bcd) != bcdSet.end())
         return(TRUE);
 
-    if (isLoaded(bcd))
+    if (is_loaded(bcd))
     {
         // Check attributes flags first
         UINT attributes = -1;
@@ -681,7 +683,7 @@ void RTTI::_RTTIBaseClassDescriptor::doStruct(ea_t bcd, __out_bcount(MAXSTR) LPS
     else
         bcdSet.insert(bcd);
 
-    if (isLoaded(bcd))
+    if (is_loaded(bcd))
     {
         UINT attributes = get_32bit(bcd + offsetof(_RTTIBaseClassDescriptor, attributes));
         doStructRTTI(bcd, s_BaseClassDescriptor_ID, NULL, ((attributes & BCD_HASPCHD) > 0));
@@ -705,7 +707,7 @@ void RTTI::_RTTIBaseClassDescriptor::doStruct(ea_t bcd, __out_bcount(MAXSTR) LPS
             set_cmt(chdOffset, buffer, TRUE);
             #endif
 
-            if (isLoaded(chd))
+            if (is_loaded(chd))
                 _RTTIClassHierarchyDescriptor::doStruct(chd, colBase64);
             else
                 _ASSERT(FALSE);
@@ -728,7 +730,7 @@ void RTTI::_RTTIBaseClassDescriptor::doStruct(ea_t bcd, __out_bcount(MAXSTR) LPS
         if (!optionPlaceStructs && attributes)
         {
             // Place attributes comment
-            if (!has_cmt(getFlags(bcd + offsetof(_RTTIBaseClassDescriptor, attributes))))
+            if (!has_cmt(get_full_flags(bcd + offsetof(_RTTIBaseClassDescriptor, attributes))))
             {
                 qstring s("");
                 BOOL b = 0;
@@ -776,7 +778,7 @@ BOOL RTTI::_RTTIClassHierarchyDescriptor::isValid(ea_t chd, ea_t colBase64)
     if (chdSet.find(chd) != chdSet.end())
         return(TRUE);
 
-    if (isLoaded(chd))
+    if (is_loaded(chd))
     {
         // signature should be zero statically
         UINT signature = -1;
@@ -805,7 +807,7 @@ BOOL RTTI::_RTTIClassHierarchyDescriptor::isValid(ea_t chd, ea_t colBase64)
                                 ea_t baseClassArray = (colBase64 + (UINT64) baseClassArrayOffset);
                                 #endif
 
-                                if (isLoaded(baseClassArray))
+                                if (is_loaded(baseClassArray))
                                 {
                                     #ifndef __EA64__
                                     ea_t baseClassDescriptor = getEa(baseClassArray);
@@ -836,7 +838,7 @@ void RTTI::_RTTIClassHierarchyDescriptor::doStruct(ea_t chd, ea_t colBase64)
     else
         chdSet.insert(chd);
 
-    if (isLoaded(chd))
+    if (is_loaded(chd))
     {
         // Place CHD
         doStructRTTI(chd, s_ClassHierarchyDescriptor_ID);
@@ -845,7 +847,7 @@ void RTTI::_RTTIClassHierarchyDescriptor::doStruct(ea_t chd, ea_t colBase64)
         UINT attributes = get_32bit(chd + offsetof(_RTTIClassHierarchyDescriptor, attributes));
         if (!optionPlaceStructs && attributes)
         {
-            if (!has_cmt(getFlags(chd + offsetof(_RTTIClassHierarchyDescriptor, attributes))))
+            if (!has_cmt(get_full_flags(chd + offsetof(_RTTIClassHierarchyDescriptor, attributes))))
             {
                 qstring s("");
                 BOOL b = 0;
@@ -905,7 +907,7 @@ void RTTI::_RTTIClassHierarchyDescriptor::doStruct(ea_t chd, ea_t colBase64)
                     fixEa(baseClassArray);
 
                     // Add index comment to to it
-                    if (!has_cmt(get_flags_novalue(baseClassArray)))
+                    if (!has_cmt(get_flags(baseClassArray)))
                     {
                         if (numBaseClasses == 1)
                             set_cmt(baseClassArray, "  BaseClass", FALSE);
@@ -926,7 +928,7 @@ void RTTI::_RTTIClassHierarchyDescriptor::doStruct(ea_t chd, ea_t colBase64)
                     ea_t bcd = (colBase64 + (UINT64)bcOffset);
 
                     // Add index comment to to it
-                    if (!has_cmt(get_flags_novalue(baseClassArray)))
+                    if (!has_cmt(get_flags(baseClassArray)))
                     {
                         if (numBaseClasses == 1)
                         {
@@ -962,11 +964,11 @@ void RTTI::_RTTIClassHierarchyDescriptor::doStruct(ea_t chd, ea_t colBase64)
                         if (optionOverwriteComments)
                         {
                             killAnteriorComments(baseClassArray);
-                            add_long_cmt(baseClassArray, true, "");
+                            add_extra_cmt(baseClassArray, true, "");
                         }
                         else
                         if (!hasAnteriorComment(baseClassArray))
-                            add_long_cmt(baseClassArray, true, "");
+                            add_extra_cmt(baseClassArray, true, "");
 
                         // Set CHD name
                         if (!hasUniqueName(chd))
@@ -983,7 +985,7 @@ void RTTI::_RTTIClassHierarchyDescriptor::doStruct(ea_t chd, ea_t colBase64)
                 // Make following DWORD if it's bytes are zeros
                 if (numBaseClasses > 0)
                 {
-                    if (isLoaded(baseClassArray))
+                    if (is_loaded(baseClassArray))
                     {
                         if (get_32bit(baseClassArray) == 0)
                             fixDword(baseClassArray);
@@ -1330,11 +1332,11 @@ void RTTI::processVftable(ea_t vft, ea_t col)
             if (optionOverwriteComments)
             {
                 killAnteriorComments(cmtPtr);
-                describe(cmtPtr, true, "\n; %s %s", ((colName[3] == 'V') ? "class" : "struct"), cmt.c_str());
+                add_extra_line(cmtPtr, true, "\n; %s %s", ((colName[3] == 'V') ? "class" : "struct"), cmt.c_str());
             }
             else
             if (!hasAnteriorComment(cmtPtr))
-                describe(cmtPtr, true, "\n; %s %s", ((colName[3] == 'V') ? "class" : "struct"), cmt.c_str()); // add_long_cmt
+                add_extra_line(cmtPtr, true, "\n; %s %s", ((colName[3] == 'V') ? "class" : "struct"), cmt.c_str()); // add_long_cmt
 
             //vftable::processMembers(plainName, vft, end);
         }

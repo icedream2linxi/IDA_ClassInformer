@@ -1,7 +1,7 @@
 /****************************************************************************
 ** Meta object code from reading C++ file 'MainDialog.h'
 **
-** Created by: The Qt Meta Object Compiler version 67 (Qt 5.4.1)
+** Created by: The Qt Meta Object Compiler version 67 (Qt 5.8.0)
 **
 ** WARNING! All changes made in this file will be lost!
 *****************************************************************************/
@@ -12,19 +12,21 @@
 #if !defined(Q_MOC_OUTPUT_REVISION)
 #error "The header file 'MainDialog.h' doesn't include <QObject>."
 #elif Q_MOC_OUTPUT_REVISION != 67
-#error "This file was generated using the moc from 5.4.1. It"
+#error "This file was generated using the moc from 5.8.0. It"
 #error "cannot be used with the include files from this version of Qt."
 #error "(The moc has changed too much.)"
 #endif
 
 QT_BEGIN_MOC_NAMESPACE
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
 struct qt_meta_stringdata_MainDialog_t {
     QByteArrayData data[3];
-    char stringdata[26];
+    char stringdata0[26];
 };
 #define QT_MOC_LITERAL(idx, ofs, len) \
     Q_STATIC_BYTE_ARRAY_DATA_HEADER_INITIALIZER_WITH_OFFSET(len, \
-    qptrdiff(offsetof(qt_meta_stringdata_MainDialog_t, stringdata) + ofs \
+    qptrdiff(offsetof(qt_meta_stringdata_MainDialog_t, stringdata0) + ofs \
         - idx * sizeof(QByteArrayData)) \
     )
 static const qt_meta_stringdata_MainDialog_t qt_meta_stringdata_MainDialog = {
@@ -64,6 +66,7 @@ void MainDialog::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, 
 {
     if (_c == QMetaObject::InvokeMetaMethod) {
         MainDialog *_t = static_cast<MainDialog *>(_o);
+        Q_UNUSED(_t)
         switch (_id) {
         case 0: _t->segmentSelect(); break;
         default: ;
@@ -86,7 +89,7 @@ const QMetaObject *MainDialog::metaObject() const
 void *MainDialog::qt_metacast(const char *_clname)
 {
     if (!_clname) return Q_NULLPTR;
-    if (!strcmp(_clname, qt_meta_stringdata_MainDialog.stringdata))
+    if (!strcmp(_clname, qt_meta_stringdata_MainDialog.stringdata0))
         return static_cast<void*>(const_cast< MainDialog*>(this));
     if (!strcmp(_clname, "Ui::MainCIDialog"))
         return static_cast< Ui::MainCIDialog*>(const_cast< MainDialog*>(this));
@@ -109,4 +112,5 @@ int MainDialog::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     }
     return _id;
 }
+QT_WARNING_POP
 QT_END_MOC_NAMESPACE

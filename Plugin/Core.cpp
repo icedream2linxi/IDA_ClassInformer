@@ -1,4 +1,4 @@
-
+ï»¿
 // ****************************************************************************
 // File: Core.cpp
 // Desc: Class Informer
@@ -79,7 +79,7 @@ static const LPCSTR columnHeader[LBCOLUMNCOUNT] =
     "Hierarchy"
 };
 
-static int idaapi uiCallback(PVOID obj, int eventID, va_list va);
+static int idaapi uiCallback(void *obj, int eventID, va_list va);
 static void freeWorkingData()
 {
     try
@@ -113,7 +113,7 @@ void CORE_Exit()
 
 		if (initResourcesOnce)
 		{
-			unhook_from_notification_point(HT_UI, uiCallback, myModuleHandle);
+			unhook_from_notification_point(HT_UI, (hook_cb_t*)&uiCallback, myModuleHandle);
 
 			if (chooserIcon)
 			{
@@ -148,7 +148,7 @@ static BOOL getTableEntry(TBLENTRY &entry, UINT index){ return(netNode->supval(i
 static BOOL setTableEntry(TBLENTRY &entry, UINT index){ return(netNode->supset(index, &entry, (offsetof(TBLENTRY, str) + entry.strSize), NN_TABLE_TAG)); }
 
 static UINT CALLBACK lw_onGetLineCount(PVOID obj){ return(getTableCount()); }
-static void CALLBACK lw_onMakeLine(PVOID obj, UINT n, char * const *cell)
+static void CALLBACK lw_onMakeLine(PVOID obj, UINT n, qstrvec_t &cell)
 {
     #ifdef __EA64__
     static char addressFormat[16];
@@ -156,10 +156,6 @@ static void CALLBACK lw_onMakeLine(PVOID obj, UINT n, char * const *cell)
 
     if(n == 0)
     {
-        // Set headers
-        for(UINT i = 0; i < LBCOLUMNCOUNT; i++)
-            strcpy(cell[i], columnHeader[i]);
-
         // vft hex address format
         #ifdef __EA64__
         UINT count = getTableCount();
@@ -176,22 +172,22 @@ static void CALLBACK lw_onMakeLine(PVOID obj, UINT n, char * const *cell)
         sprintf(addressFormat, "%%0%uI64X", maxDigits);
         #endif
     }
-    else
+
     {
         // Populate requested row
         TBLENTRY e;
-        getTableEntry(e, (n - 1));
+        getTableEntry(e, n);
         // vft address
         #ifdef __EA64__
-        sprintf(cell[0], addressFormat, e.vft);
+        cell[0].sprnt(addressFormat, e.vft);
         #else
-        sprintf(cell[0], EAFORMAT, e.vft);
+        cell[0].sprnt(EAFORMAT, e.vft);
         #endif
         // Method count
         if (e.methods > 0)
-            sprintf(cell[1], "%u", e.methods); // "%04u"
+            cell[1].sprnt("%u", e.methods); // "%04u"
         else
-            strcpy(cell[1], "???");
+            cell[1] = "???";
         // Flags
         char flags[4];
         int pos = 0;
@@ -199,13 +195,13 @@ static void CALLBACK lw_onMakeLine(PVOID obj, UINT n, char * const *cell)
         if (e.flags & RTTI::CHD_VIRTINH)   flags[pos++] = 'V';
         if (e.flags & RTTI::CHD_AMBIGUOUS) flags[pos++] = 'A';
         flags[pos++] = 0;
-        memcpy(cell[2], flags, pos);
+		cell[2] = flags;
         // Type
         LPCSTR tag = strchr(e.str, '@');
         if (tag)
         {
             pos = (tag - e.str);
-            memcpy(cell[3], e.str, pos);
+            cell[3] = qstring(e.str, pos);
             cell[3][pos] = 0;
             ++tag;
         }
@@ -213,12 +209,12 @@ static void CALLBACK lw_onMakeLine(PVOID obj, UINT n, char * const *cell)
         {
             // Can happen when string is MAXSTR and greater
             //_ASSERT(FALSE);
-            strcpy(cell[3], "??** MAXSTR overflow!");
+            cell[3] = "??** MAXSTR overflow!";
             tag = e.str;
             pos = (strlen(e.str) + 1);
         }
         // Composition/hierarchy
-        strncpy(cell[4], tag, (MAXSTR - 1));
+        cell[4] = tag;
     }
 }
 
@@ -241,7 +237,7 @@ static int CALLBACK lw_onGetIcon(PVOID obj, UINT n)
 static void CALLBACK lw_onSelect(PVOID obj, UINT n)
 {
     TBLENTRY e;
-    getTableEntry(e, (n - 1));
+    getTableEntry(e, n);
     jumpto(e.vft);
 }
 static void CALLBACK lw_onClose(PVOID obj) { freeWorkingData(); }
@@ -317,7 +313,7 @@ void customizeChooseWindow()
 }
 
 // UI callback to handle chooser window coloring
-static int idaapi uiCallback(PVOID obj, int eventID, va_list va)
+static int idaapi uiCallback(void *obj, int eventID, va_list va)
 {
     if (eventID == ui_get_chooser_item_attrs)
     {
@@ -345,7 +341,62 @@ static int idaapi uiCallback(PVOID obj, int eventID, va_list va)
 }
 
 
-static HWND WINAPI getIdaHwnd(){ return((HWND)callui(ui_get_hwnd).vptr); }
+struct ListResultChooser : public chooser_t
+{
+	ListResultChooser()
+		: chooser_t(CH_ATTRS, LBCOLUMNCOUNT, listBColumnWidth, columnHeader, LBTITLE)
+	{
+		icon = ((chooserIcon != 0) ? chooserIcon : 160);
+	}
+
+	virtual ssize_t idaapi get_item_index(const void *item_data) const override
+	{
+		if (item_data == nullptr)
+			return NO_SELECTION;
+		return __super::get_item_index(item_data);
+	}
+
+	virtual size_t idaapi get_count() const override
+	{
+		return lw_onGetLineCount(nullptr);
+	}
+
+	virtual void idaapi get_row(
+		qstrvec_t *cols,
+		int *icon_,
+		chooser_item_attrs_t *attrs,
+		size_t n) const override
+	{
+		//*icon_ = -1;
+		*icon_ = 191;
+
+		lw_onMakeLine(nullptr, n, *cols);
+	}
+
+	virtual cbret_t idaapi enter(size_t n) override
+	{
+		select(n);
+		return n;
+	}
+
+	virtual void idaapi select(ssize_t n) const override
+	{
+		lw_onSelect(NULL, n);
+	}
+
+	virtual void idaapi closed() override
+	{
+		lw_onClose(nullptr);
+	}
+};
+
+ListResultChooser *chooser = nullptr;
+
+static HWND WINAPI getIdaHwnd(){
+	//return((HWND)callui(ui_get_hwnd).vptr);
+	QWidget *topWidget = QApplication::topLevelAt(((QWidget*)get_current_widget())->mapToGlobal(QPoint()));
+	return (HWND)topWidget->winId();
+}
 
 void CORE_Process(int arg)
 {
@@ -369,10 +420,10 @@ void CORE_Process(int arg)
 			}
 
 			// Hook to control line color
-			hook_to_notification_point(HT_UI, uiCallback, myModuleHandle);
+			hook_to_notification_point(HT_UI, (hook_cb_t*)&uiCallback, myModuleHandle);
 		}
 
-        if(!autoIsOk())
+        if(!auto_is_ok())
         {
             msg("** Class Informer: Must wait for IDA to finish processing before starting plug-in! **\n*** Aborted ***\n\n");
             return;
@@ -411,7 +462,7 @@ void CORE_Process(int arg)
 				refreshUI();
 			}
 			else
-				storageExists = (askyn_c(1, "TITLE Class Informer \nHIDECANCEL\nUse previously stored result?        ") == 1);
+				storageExists = (ask_yn(1, "TITLE Class Informer \nHIDECANCEL\nUse previously stored result?        ") == 1);
 		}
 
         BOOL aborted = FALSE;
@@ -425,7 +476,7 @@ void CORE_Process(int arg)
             {
                 msg("** IDA reports target compiler: \"%s\"\n", get_compiler_name(cmp));
                 refreshUI();
-                int iResult = askbuttons_c(NULL, NULL, NULL, 0, "TITLE Class Informer\nHIDECANCEL\nIDA reports this IDB's compiler as: \"%s\" \n\nThis plug-in only understands MS Visual C++ targets.\nRunning it on other targets (like Borland© compiled, etc.) will have unpredicted results.   \n\nDo you want to continue anyhow?", get_compiler_name(cmp));
+                int iResult = ask_buttons(NULL, NULL, NULL, 0, "TITLE Class Informer\nHIDECANCEL\nIDA reports this IDB's compiler as: \"%s\" \n\nThis plug-in only understands MS Visual C++ targets.\nRunning it on other targets (like Borland compiled, etc.) will have unpredicted results.   \n\nDo you want to continue anyhow?", get_compiler_name(cmp));
                 if (iResult != 1)
                 {
                     msg("- Aborted -\n\n");
@@ -503,24 +554,28 @@ void CORE_Process(int arg)
         // Show list result window
         if (!aborted && (getTableCount() > 0))
         {
-            choose2((CH_MULTI | CH_ATTRS), // Non-modal window; mullti-select (for select copying) w/attributes
-            -1, -1, -1, -1,     // Window position
-            NULL,               // LPARM
-            LBCOLUMNCOUNT,      // Number of columns
-            listBColumnWidth,   // Widths of columns
-            lw_onGetLineCount,  // Function that returns number of lines
-            lw_onMakeLine,      // Function that generates a line
-            LBTITLE,            // Window title
-            ((chooserIcon != 0) ? chooserIcon : 160), // Icon for the window
-            0,                  // Starting line
-            NULL,               // "kill" callback
-            NULL,               // "new" callback
-            NULL,               // "update" callback
-            NULL,               // "edit" callback
-            lw_onSelect,        // Function to call when the user pressed Enter
-            lw_onClose,         // Function to call when the window is closed
-            NULL,               // Popup menu items
-            lw_onGetIcon);      // Line icon function
+			if (chooser == nullptr)
+				chooser = new ListResultChooser();
+			choose(chooser, nullptr);
+
+            //choose2((CH_MULTI | CH_ATTRS), // Non-modal window; mullti-select (for select copying) w/attributes
+            //-1, -1, -1, -1,     // Window position
+            //NULL,               // LPARM
+            //LBCOLUMNCOUNT,      // Number of columns
+            //listBColumnWidth,   // Widths of columns
+            //lw_onGetLineCount,  // Function that returns number of lines
+            //lw_onMakeLine,      // Function that generates a line
+            //LBTITLE,            // Window title
+            //((chooserIcon != 0) ? chooserIcon : 160), // Icon for the window
+            //0,                  // Starting line
+            //NULL,               // "kill" callback
+            //NULL,               // "new" callback
+            //NULL,               // "update" callback
+            //NULL,               // "edit" callback
+            //lw_onSelect,        // Function to call when the user pressed Enter
+            //lw_onClose,         // Function to call when the window is closed
+            //NULL,               // Popup menu items
+            //lw_onGetIcon);      // Line icon function
 
             customizeChooseWindow();
         }
@@ -592,13 +647,13 @@ static void setIntializerTable(ea_t start, ea_t end, BOOL isCpp)
             if (!hasAnteriorComment(start))
             {
                 if (isCpp)
-                    add_long_cmt(start, TRUE, "%d C++ static ctors (#classinformer)", count);
+					add_extra_cmt(start, TRUE, "%d C++ static ctors (#classinformer)", count);
                 else
-                    add_long_cmt(start, TRUE, "%d C initializers (#classinformer)", count);
+					add_extra_cmt(start, TRUE, "%d C initializers (#classinformer)", count);
             }
             else
             // Place comment @ address instead
-            if (!has_cmt(get_flags_novalue(start)))
+            if (!has_cmt(get_flags(start)))
             {
                 char comment[MAXSTR]; comment[SIZESTR(comment)] = 0;
                 if (isCpp)
@@ -661,10 +716,10 @@ static void setTerminatorTable(ea_t start, ea_t end)
             // Comment
             // Never overwrite, it might be the segment comment
             if (!hasAnteriorComment(start))
-                add_long_cmt(start, TRUE, "%d C terminators (#classinformer)", count);
+                add_extra_cmt(start, TRUE, "%d C terminators (#classinformer)", count);
             else
             // Place comment @ address instead
-            if (!has_cmt(get_flags_novalue(start)))
+            if (!has_cmt(get_flags(start)))
             {
                 char comment[MAXSTR]; comment[SIZESTR(comment)] = 0;
                 _snprintf(comment, SIZESTR(comment), "%d C terminators (#classinformer)", count);
@@ -716,10 +771,10 @@ static void setCtorDtorTable(ea_t start, ea_t end)
             // Comment
             // Never overwrite, it might be the segment comment
             if (!hasAnteriorComment(start))
-                add_long_cmt(start, TRUE, "%d C initializers/terminators (#classinformer)", count);
+                add_extra_cmt(start, TRUE, "%d C initializers/terminators (#classinformer)", count);
             else
             // Place comment @ address instead
-            if (!has_cmt(get_flags_novalue(start)))
+            if (!has_cmt(get_flags(start)))
             {
                 char comment[MAXSTR]; comment[SIZESTR(comment)] = 0;
                 _snprintf(comment, SIZESTR(comment), "%d C initializers/terminators (#classinformer)", count);
@@ -769,7 +824,7 @@ static UINT doInittermTable(func_t *func, ea_t start, ea_t end, LPCTSTR name)
             if (func)
             {
                 qstring qstr;
-                if (get_long_name(&qstr, func->startEA) > 0)
+                if (get_long_name(&qstr, func->start_ea) > 0)
                 {
                     char funcName[MAXSTR]; funcName[SIZESTR(funcName)] = 0;
                     strncpy(funcName, qstr.c_str(), (MAXSTR - 1));
@@ -824,7 +879,7 @@ static BOOL processInitterm(ea_t address, LPCTSTR name)
         msg("  " EAFORMAT " \"%s\" xref.\n", xref, name);
 
         // Should be code
-        if (isCode(get_flags_novalue(xref)))
+        if (is_code(get_flags(xref)))
         {
             do
             {
@@ -839,9 +894,9 @@ static BOOL processInitterm(ea_t address, LPCTSTR name)
 
                 // Bail instructions are past the function start now
                 func_t *func = get_func(xref);
-                if (func && (instruction2 < func->startEA))
+                if (func && (instruction2 < func->start_ea))
                 {
-                    //msg("   " EAFORMAT " arg2 outside of contained function **\n", func->startEA);
+                    //msg("   " EAFORMAT " arg2 outside of contained function **\n", func->start_ea);
                     break;
                 }
 
@@ -886,12 +941,12 @@ static BOOL processInitterm(ea_t address, LPCTSTR name)
                 searchStart = prev_head(searchStart, BADADDR);
                 if (searchStart == BADADDR)
                     break;
-                if (func && (searchStart < func->startEA))
+                if (func && (searchStart < func->start_ea))
                     break;
 
-                    if (func && (searchStart < func->startEA))
+                    if (func && (searchStart < func->start_ea))
                     {
-                        msg("  " EAFORMAT " arg3 outside of contained function **\n", func->startEA);
+                        msg("  " EAFORMAT " arg3 outside of contained function **\n", func->start_ea);
                         break;
                     }
 
@@ -936,7 +991,7 @@ static BOOL processStaticTables()
             if (func_t *func = getn_func(i))
             {
                 qstring qstr;
-                if (get_long_name(&qstr, func->startEA) > 0)
+                if (get_long_name(&qstr, func->start_ea) > 0)
                 {
                     char name[MAXSTR]; name[SIZESTR(name)] = 0;
                     strncpy(name, qstr.c_str(), (MAXSTR - 1));
@@ -949,7 +1004,7 @@ static BOOL processStaticTables()
                             // Skip stub functions
                             if (func->size() > 16)
                             {
-                                msg(EAFORMAT" C: \"%s\", %d bytes.\n", func->startEA, name, func->size());
+                                msg(EAFORMAT" C: \"%s\", %d bytes.\n", func->start_ea, name, func->size());
                                 _ASSERT(cinitFunc == NULL);
                                 cinitFunc = func;
                             }
@@ -957,14 +1012,14 @@ static BOOL processStaticTables()
                         else
                         if ((len >= SIZESTR("_initterm")) && (strcmp((name + (len - SIZESTR("_initterm"))), "_initterm") == 0))
                         {
-                            msg(EAFORMAT" I: \"%s\", %d bytes.\n", func->startEA, name, func->size());
-                            inittermMap[func->startEA] = name;
+                            msg(EAFORMAT" I: \"%s\", %d bytes.\n", func->start_ea, name, func->size());
+                            inittermMap[func->start_ea] = name;
                         }
                         else
                         if ((len >= SIZESTR("_initterm_e")) && (strcmp((name + (len - SIZESTR("_initterm_e"))), "_initterm_e") == 0))
                         {
-                            msg(EAFORMAT" E: \"%s\", %d bytes.\n", func->startEA, name, func->size());
-                            inittermMap[func->startEA] = name;
+                            msg(EAFORMAT" E: \"%s\", %d bytes.\n", func->start_ea, name, func->size());
+                            inittermMap[func->start_ea] = name;
                         }
                     }
                 }
@@ -1009,14 +1064,14 @@ static BOOL processStaticTables()
 
             for (UINT i = 0; i < qnumber(pat); i++)
             {
-                ea_t match = find_binary(cinitFunc->startEA, cinitFunc->endEA, pat[i].pattern, 16, (SEARCH_DOWN | SEARCH_NOBRK | SEARCH_NOSHOW));
+                ea_t match = find_binary(cinitFunc->start_ea, cinitFunc->end_ea, pat[i].pattern, 16, (SEARCH_DOWN | SEARCH_NOBRK | SEARCH_NOSHOW));
                 while (match != BADADDR)
                 {
                     msg("  " EAFORMAT " Register _initterm(), pattern #%d.\n", match, i);
                     ea_t start = getEa(match + pat[i].start);
                     ea_t end   = getEa(match + pat[i].end);
                     processRegisterInitterm(start, end, (match + pat[i].call));
-                    match = find_binary(match + 30, cinitFunc->endEA, pat[i].pattern, 16, (SEARCH_NEXT | SEARCH_DOWN | SEARCH_NOBRK | SEARCH_NOSHOW));
+                    match = find_binary(match + 30, cinitFunc->end_ea, pat[i].pattern, 16, (SEARCH_NEXT | SEARCH_DOWN | SEARCH_NOBRK | SEARCH_NOSHOW));
                 };
             }
         }
@@ -1057,10 +1112,10 @@ inline void killAnteriorComments(ea_t ea)
 // Force a memory location to be DWORD size
 void fixDword(ea_t ea)
 {
-    if (!isDwrd(get_flags_novalue(ea)))
+    if (!is_dword(get_flags(ea)))
     {
         setUnknown(ea, sizeof(DWORD));
-        doDwrd(ea, sizeof(DWORD));
+        create_dword(ea, sizeof(DWORD));
     }
 }
 
@@ -1068,16 +1123,16 @@ void fixDword(ea_t ea)
 void fixEa(ea_t ea)
 {
     #ifndef __EA64__
-    if (!isDwrd(get_flags_novalue(ea)))
+    if (!is_dword(get_flags(ea)))
     #else
-    if (!isQwrd(get_flags_novalue(ea)))
+    if (!is_qword(get_flags(ea)))
     #endif
     {
         setUnknown(ea, sizeof(ea_t));
         #ifndef __EA64__
-        doDwrd(ea, sizeof(ea_t));
+        create_dword(ea, sizeof(ea_t));
         #else
-        doQwrd(ea, sizeof(ea_t));
+		create_qword(ea, sizeof(ea_t));
         #endif
     }
 }
@@ -1085,14 +1140,14 @@ void fixEa(ea_t ea)
 // Make address a function
 void fixFunction(ea_t ea)
 {
-    flags_t flags = get_flags_novalue(ea);
-    if (!isCode(flags))
+    flags_t flags = get_flags(ea);
+    if (!is_code(flags))
     {
         create_insn(ea);
         add_func(ea, BADADDR);
     }
     else
-    if (!isFunc(flags))
+    if (!is_func(flags))
         add_func(ea, BADADDR);
 }
 
@@ -1100,7 +1155,7 @@ void fixFunction(ea_t ea)
 BOOL getVerifyEa(ea_t ea, ea_t &rValue)
 {
     // Location valid?
-    if (isLoaded(ea))
+    if (is_loaded(ea))
     {
         // Get ea_t value
         rValue = getEa(ea);
@@ -1135,7 +1190,7 @@ BOOL getPlainTypeName(__in LPCSTR mangled, __out_bcount(MAXSTR) LPSTR outStr)
     // IDA demangler for everything else
     {
         qstring qstr;
-        int result = demangle_name2(&qstr, mangled, (MT_MSCOMP | MNG_NODEFINIT));
+        int result = demangle_name(&qstr, mangled, (MT_MSCOMP | MNG_NODEFINIT));
         if (result < 0)
         {
             //msg("** getPlainClassName:demangle_name2() failed to unmangle! result: %d, input: \"%s\"\n", result, mangled);
@@ -1206,7 +1261,8 @@ void setUnknown(ea_t ea, int size)
             break;
         else
         {
-            do_unknown(ea, DOUNK_SIMPLE);
+			del_items(ea);
+            //do_unknown(ea, DOUNK_SIMPLE);
             ea += (ea_t)isize, size -= isize;
         }
     };
@@ -1216,17 +1272,17 @@ void setUnknown(ea_t ea, int size)
 // Scan segment for COLs
 static BOOL scanSeg4Cols(segment_t *seg)
 {
-    char name[64];
-    if (get_true_segm_name(seg, name, SIZESTR(name)) <= 0)
-        strcpy(name, "???");
-    msg(" N: \"%s\", A: " EAFORMAT " - " EAFORMAT ", S: %s.\n", name, seg->startEA, seg->endEA, byteSizeString(seg->size()));
+    qstring name;
+    if (get_segm_name(&name, seg) <= 0)
+        name = "???";
+    msg(" N: \"%s\", A: " EAFORMAT " - " EAFORMAT ", S: %s.\n", name.c_str(), seg->start_ea, seg->end_ea, byteSizeString(seg->size()));
     refreshUI();
 
     UINT found = 0;
     if (seg->size() >= sizeof(RTTI::_RTTICompleteObjectLocator))
     {
-        ea_t startEA = ((seg->startEA + sizeof(UINT)) & ~((ea_t)(sizeof(UINT) - 1)));
-        ea_t endEA   = (seg->endEA - sizeof(RTTI::_RTTICompleteObjectLocator));
+        ea_t startEA = ((seg->start_ea + sizeof(UINT)) & ~((ea_t)(sizeof(UINT) - 1)));
+        ea_t endEA   = (seg->end_ea - sizeof(RTTI::_RTTICompleteObjectLocator));
 
         for (ea_t ptr = startEA; ptr < endEA;)
         {
@@ -1349,17 +1405,17 @@ static BOOL findCols(SegSelect::segments *segList)
 // Locate vftables
 static BOOL scanSeg4Vftables(segment_t *seg, eaRefMap &colMap)
 {
-    char name[64];
-    if (get_true_segm_name(seg, name, SIZESTR(name)) <= 0)
-        strcpy(name, "???");
-    msg(" N: \"%s\", A: " EAFORMAT "-" EAFORMAT ", S: %s.\n", name, seg->startEA, seg->endEA, byteSizeString(seg->size()));
+	qstring name;
+    if (get_segm_name(&name, seg) <= 0)
+        name = "???";
+    msg(" N: \"%s\", A: " EAFORMAT "-" EAFORMAT ", S: %s.\n", name.c_str(), seg->start_ea, seg->end_ea, byteSizeString(seg->size()));
     refreshUI();
 
     UINT found = 0;
     if (seg->size() >= sizeof(ea_t))
     {
-        ea_t startEA = ((seg->startEA + sizeof(ea_t)) & ~((ea_t)(sizeof(ea_t) - 1)));
-        ea_t endEA   = (seg->endEA - sizeof(ea_t));
+        ea_t startEA = ((seg->start_ea + sizeof(ea_t)) & ~((ea_t)(sizeof(ea_t) - 1)));
+        ea_t endEA   = (seg->end_ea - sizeof(ea_t));
         eaRefMap::iterator colEnd = colMap.end();
 
         for (ea_t ptr = startEA; ptr < endEA; ptr += sizeof(UINT))  //sizeof(ea_t)

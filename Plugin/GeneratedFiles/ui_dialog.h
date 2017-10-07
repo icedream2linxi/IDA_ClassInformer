@@ -1,7 +1,7 @@
 /********************************************************************************
 ** Form generated from reading UI file 'dialog.ui'
 **
-** Created by: Qt User Interface Compiler version 5.4.1
+** Created by: Qt User Interface Compiler version 5.8.0
 **
 ** WARNING! All changes made in this file will be lost when recompiling UI file!
 ********************************************************************************/
@@ -140,14 +140,14 @@ public:
 
     void retranslateUi(QDialog *MainCIDialog)
     {
-        checkBox1->setText(QApplication::translate("MainCIDialog", "Place structures", 0));
-        checkBox2->setText(QApplication::translate("MainCIDialog", "Process static initializers && terminators", 0));
-        checkBox3->setText(QApplication::translate("MainCIDialog", "Overwrite anterior comments", 0));
-        checkBox4->setText(QApplication::translate("MainCIDialog", "Audio on completion", 0));
-        linkLabel->setText(QApplication::translate("MainCIDialog", "<a href=\"http://www.macromonkey.com/bb/index.php/topic,13.0.html\" style=\"color:#AA00FF;\">Class Informer Fourm</a>", 0));
+        checkBox1->setText(QApplication::translate("MainCIDialog", "Place structures", Q_NULLPTR));
+        checkBox2->setText(QApplication::translate("MainCIDialog", "Process static initializers && terminators", Q_NULLPTR));
+        checkBox3->setText(QApplication::translate("MainCIDialog", "Overwrite anterior comments", Q_NULLPTR));
+        checkBox4->setText(QApplication::translate("MainCIDialog", "Audio on completion", Q_NULLPTR));
+        linkLabel->setText(QApplication::translate("MainCIDialog", "<a href=\"http://www.macromonkey.com/bb/index.php/topic,13.0.html\" style=\"color:#AA00FF;\">Class Informer Fourm</a>", Q_NULLPTR));
         image->setText(QString());
         versionLabel->setText(QApplication::translate("MainCIDialog", "Version: 2.4\n"
-"By Sirmabus", 0));
+"By Sirmabus", Q_NULLPTR));
         Q_UNUSED(MainCIDialog);
     } // retranslateUi
 

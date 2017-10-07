@@ -4,7 +4,7 @@
 
 // Online: http://demangler.com/
 
-typedef void * (__cdecl * _Alloc)(UINT);
+typedef void * (__cdecl * _Alloc)(size_t);
 typedef void(__cdecl * _Free)(PVOID);
 
 const UINT UNDNAME_COMPLETE                 = 0x00000;  // Enable full undecoration
