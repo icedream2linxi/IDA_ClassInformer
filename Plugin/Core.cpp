@@ -410,7 +410,7 @@ void CORE_Process(int arg)
 		if (!initResourcesOnce)
 		{
 			initResourcesOnce = TRUE;
-			Q_INIT_RESOURCE(ClassInformerRes);			
+			Q_INIT_RESOURCE(ClassInformerRes);
 
 			QFile file(STYLE_PATH "icon.png");
 			if (file.open(QFile::ReadOnly))

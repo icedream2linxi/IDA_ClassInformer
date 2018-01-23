@@ -2,5 +2,6 @@
 x64/
 Debug/
 Release/
+GeneratedFiles/
 *.db
 *.opendb
