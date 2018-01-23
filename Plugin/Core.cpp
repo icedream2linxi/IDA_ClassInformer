@@ -375,13 +375,12 @@ struct ListResultChooser : public chooser_t
 
 	virtual cbret_t idaapi enter(size_t n) override
 	{
-		select(n);
+		lw_onSelect(NULL, n);
 		return n;
 	}
 
 	virtual void idaapi select(ssize_t n) const override
 	{
-		lw_onSelect(NULL, n);
 	}
 
 	virtual void idaapi closed() override
